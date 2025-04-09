@@ -101,12 +101,16 @@ def determine_ball_location(pressure):
         return "visitante"
     return "medio"
 
-def classify_rhythm(pressure, dangerous):
-    total = pressure["home"] + pressure["away"]
-    danger_total = dangerous["home"] + dangerous["away"]
-    if total > 120 or danger_total > 40:
+def classify_rhythm(pressure, dangerous_raw):
+    home_danger = dangerous_raw.get("home", {}).get("dangerous", 0)
+    away_danger = dangerous_raw.get("away", {}).get("dangerous", 0)
+    danger_total = home_danger + away_danger
+
+    total_pressure = pressure["home"] + pressure["away"]
+
+    if total_pressure > 120 or danger_total > 40:
         return "Alto"
-    elif total > 90 or danger_total > 25:
+    elif total_pressure > 90 or danger_total > 25:
         return "Moderado"
     return "Bajo"
 
@@ -136,7 +140,7 @@ def get_live_predictions():
         minute = fixture.get("status", {}).get("elapsed", 0)
         timestamp = fixture.get("timestamp")
 
-        second = datetime.utcnow().second  # Aprox. para visual
+        second = datetime.utcnow().second
 
         stats = fetch_statistics(fixture_id)
         pressure = calculate_pressure(stats.get("pressure_raw", {}), minute)
