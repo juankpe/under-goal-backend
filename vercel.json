@@ -3,12 +3,15 @@
   "builds": [
     {
       "src": "main.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb"
+      }
     }
   ],
   "routes": [
     {
-      "src": "/live-predictions",
+      "src": "/(.*)",
       "dest": "/main.py"
     }
   ]
