@@ -4,8 +4,10 @@ import requests
 import os
 from datetime import datetime
 
+# Inicializamos la aplicación FastAPI
 app = FastAPI()
 
+# Configuración de CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,10 +16,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Ruta principal de la API
 @app.get("/")
 def root():
     return {"status": "OK", "message": "Under Goal API está funcionando"}
 
+# Obtener la clave de API desde las variables de entorno
 API_KEY = os.getenv("RAPIDAPI_KEY")
 API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
 API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
@@ -26,6 +30,7 @@ HEADERS = {
     "X-RapidAPI-Host": API_HOST
 }
 
+# Función para obtener las estadísticas de un partido
 def fetch_statistics(fixture_id):
     url = f"{API_BASE_URL}/fixtures/statistics?fixture={fixture_id}"
     response = requests.get(url, headers=HEADERS)
@@ -73,6 +78,7 @@ def fetch_statistics(fixture_id):
         "free_kicks": free_kicks
     }
 
+# Función para calcular la presión ofensiva
 def calculate_pressure(raw, minute):
     def ipo(data):
         return (data.get("dangerous", 0) * 2 + data.get("shots", 0) * 1.5 + data.get("shots_on", 0) * 2.5) / (minute or 1)
@@ -85,6 +91,7 @@ def calculate_pressure(raw, minute):
         "away": round(away_val / total * 100)
     }
 
+# Función para estimar el cansancio de los jugadores
 def calculate_fatigue(pressure, minute):
     def estimate(p):
         if minute < 30:
@@ -99,6 +106,7 @@ def calculate_fatigue(pressure, minute):
         "away": estimate(pressure["away"])
     }
 
+# Función para determinar la ubicación del balón
 def determine_ball_location(pressure):
     if pressure["home"] > 60:
         return "local"
@@ -106,6 +114,7 @@ def determine_ball_location(pressure):
         return "visitante"
     return "medio"
 
+# Función para clasificar el ritmo del partido
 def classify_rhythm(pressure, dangerous_raw):
     home_danger = dangerous_raw.get("home", {}).get("dangerous", 0)
     away_danger = dangerous_raw.get("away", {}).get("dangerous", 0)
@@ -119,6 +128,7 @@ def classify_rhythm(pressure, dangerous_raw):
         return "Moderado"
     return "Bajo"
 
+# Función para simular los siguientes 10 minutos
 def simulate_next_10min(rhythm, goals):
     if rhythm == "Alto" and (goals["home"] + goals["away"]) >= 1:
         return "⚠️ Posible gol"
@@ -126,6 +136,7 @@ def simulate_next_10min(rhythm, goals):
         return "✅ Sin peligro"
     return "🔄 Difícil de predecir"
 
+# Función para obtener los partidos en vivo y sus predicciones
 @app.get("/live-predictions")
 def get_live_predictions():
     url = f"{API_BASE_URL}/fixtures?live=all"
@@ -145,9 +156,6 @@ def get_live_predictions():
         goals = match.get("goals", {})
         fixture_id = fixture.get("id")
         minute = fixture.get("status", {}).get("elapsed", 0)
-        timestamp = fixture.get("timestamp")
-
-        second = datetime.utcnow().second
 
         stats = fetch_statistics(fixture_id)
         pressure = calculate_pressure(stats.get("pressure_raw", {}), minute)
@@ -166,7 +174,6 @@ def get_live_predictions():
         results.append({
             "fixture_id": fixture_id,
             "minute": minute,
-            "second": second,
             "teams": {
                 "home": {
                     "name": teams.get("home", {}).get("name"),
