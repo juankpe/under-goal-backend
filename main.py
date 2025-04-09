@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
+import os
 
 app = FastAPI()
 
@@ -12,8 +13,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-API_KEY = "132239f6a2mshdb90976390caecfp19239ejsneb1c3e217797"
-API_HOST = "api-football-v1.p.rapidapi.com"
+API_KEY = os.getenv("RAPIDAPI_KEY")
+API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
 API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
 HEADERS = {
     "X-RapidAPI-Key": API_KEY,
