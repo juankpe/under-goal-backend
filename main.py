@@ -14,6 +14,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {"status": "OK", "message": "Under Goal API está funcionando"}
+
 API_KEY = os.getenv("RAPIDAPI_KEY")
 API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
 API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
@@ -26,6 +30,7 @@ def fetch_statistics(fixture_id):
     url = f"{API_BASE_URL}/fixtures/statistics?fixture={fixture_id}"
     response = requests.get(url, headers=HEADERS)
     if response.status_code != 200:
+        print("❌ ERROR STATS:", response.status_code, response.text)
         return {}
 
     stats = response.json().get("response", [])
@@ -126,6 +131,8 @@ def get_live_predictions():
     url = f"{API_BASE_URL}/fixtures?live=all"
     response = requests.get(url, headers=HEADERS)
     if response.status_code != 200:
+        print("❌ ERROR RapidAPI:", response.status_code)
+        print("➡️ Texto:", response.text)
         raise HTTPException(status_code=500, detail="Error al obtener datos de partidos en vivo")
 
     data = response.json()
