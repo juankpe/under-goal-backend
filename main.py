@@ -21,6 +21,7 @@ HEADERS = {
     "X-RapidAPI-Host": API_HOST
 }
 
+
 def fetch_statistics(fixture_id):
     url = f"{API_BASE_URL}/fixtures/statistics?fixture={fixture_id}"
     response = requests.get(url, headers=HEADERS)
@@ -34,9 +35,10 @@ def fetch_statistics(fixture_id):
     cards = {"yellow": 0, "red": 0}
     corners = {"total": 0}
     possession = {"home": 50, "away": 50}
+    pressure_data = {"home": {}, "away": {}}
 
     for team_stats in stats:
-        team = team_stats.get("team", {})
+        team_side = "home" if stats.index(team_stats) == 0 else "away"
         stats_list = team_stats.get("statistics", [])
 
         for stat in stats_list:
@@ -50,18 +52,47 @@ def fetch_statistics(fixture_id):
             elif "corner kicks" in name:
                 corners["total"] += int(value)
             elif "possession" in name and "%" in str(value):
-                val = int(str(value).replace("%", ""))
-                if team.get("name") == team_stats["team"]["name"]:
-                    if team_stats == stats[0]:
-                        possession["home"] = val
-                    else:
-                        possession["away"] = val
+                possession[team_side] = int(str(value).replace("%", ""))
+
+            elif "total shots" in name:
+                pressure_data[team_side]["shots"] = int(value)
+            elif "shots on goal" in name:
+                pressure_data[team_side]["shots_on"] = int(value)
+            elif "attacks" in name:
+                pressure_data[team_side]["attacks"] = int(value)
+            elif "dangerous attacks" in name:
+                pressure_data[team_side]["dangerous"] = int(value)
 
     return {
         "cards": cards,
         "corners": corners,
-        "possession": possession
+        "possession": possession,
+        "pressure_raw": pressure_data
     }
+
+
+def calculate_pressure(pressure_data, minute):
+    if not pressure_data or minute == 0:
+        return {"home": 50, "away": 50}
+
+    def ipo(team):
+        d_att = pressure_data[team].get("dangerous", 0)
+        shots = pressure_data[team].get("shots", 0)
+        shots_on = pressure_data[team].get("shots_on", 0)
+        return (d_att * 2 + shots * 1.5 + shots_on * 2.5) / minute
+
+    ipo_home = ipo("home")
+    ipo_away = ipo("away")
+
+    total = ipo_home + ipo_away
+    if total == 0:
+        return {"home": 50, "away": 50}
+
+    return {
+        "home": round(ipo_home / total * 100),
+        "away": round(ipo_away / total * 100)
+    }
+
 
 @app.get("/live-predictions")
 def get_live_predictions():
@@ -79,15 +110,13 @@ def get_live_predictions():
         fixture = match.get("fixture", {})
         teams = match.get("teams", {})
         goals = match.get("goals", {})
-
-        minute = fixture.get("status", {}).get("elapsed", 0)
-        total_goals = goals.get("home", 0) + goals.get("away", 0)
-
-        # Obtener estadísticas avanzadas por partido
         fixture_id = fixture.get("id")
-        statistics = fetch_statistics(fixture_id)
+        minute = fixture.get("status", {}).get("elapsed", 0)
 
-        # Clasificación de riesgo
+        statistics = fetch_statistics(fixture_id)
+        pressure = calculate_pressure(statistics.get("pressure_raw", {}), minute)
+
+        total_goals = goals.get("home", 0) + goals.get("away", 0)
         if minute >= 60 and total_goals >= 3:
             prediction = "Riesgo alto"
         elif minute >= 30 and total_goals >= 2:
@@ -95,7 +124,6 @@ def get_live_predictions():
         else:
             prediction = "Bajo riesgo"
 
-        # Incluir datos
         results.append({
             "fixture_id": fixture_id,
             "minute": minute,
@@ -114,7 +142,8 @@ def get_live_predictions():
             "goals": goals,
             "statistics": {
                 "cards": statistics.get("cards", {}),
-                "corners": statistics.get("corners", {})
+                "corners": statistics.get("corners", {}),
+                "pressure": pressure
             },
             "prediction": prediction
         })
