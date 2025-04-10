@@ -1,3 +1,5 @@
-fastapi==0.95.0
-requests==2.28.2
-uvicorn==0.18.2
+fastapi
+uvicorn
+requests
+redis
+python-dotenv
