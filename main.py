@@ -16,9 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Obtener la clave de API desde las variables de entorno
-API_KEY = os.getenv("RAPIDAPI_KEY")
-API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
+# Clave de API de RapidAPI
+API_KEY = "132239f6a2mshdb90976390caecfp19239ejsneb1c3e217797"  # Tu clave de API de RapidAPI
+API_HOST = "api-football-v1.p.rapidapi.com"
 API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
 HEADERS = {
     "X-RapidAPI-Key": API_KEY,
