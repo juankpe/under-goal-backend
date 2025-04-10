@@ -122,6 +122,7 @@ def get_live_predictions():
         print('Consultando:', url)  # Imprime la URL de la API
         res = requests.get(url, headers=HEADERS)
         print('Respuesta API:', res.json())  # Imprime la respuesta completa de la API
+        print('Datos completos de Predicciones:', res.json().get('response', 'No predicciones encontradas'))  # Muestra los datos completos de predicciones
 
         if res.status_code != 200:
             raise HTTPException(status_code=500, detail=f"Error RapidAPI: {res.status_code}, {res.text}")
