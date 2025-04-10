@@ -137,7 +137,7 @@ def get_live_predictions():
             fatigue = calculate_fatigue(pressure, match["fixture"]["status"].get("elapsed", 0))
             next_10 = simulate_next_10min(pressure, match.get("goals", {}))
 
-            # Obtener la predicción de goles si está disponible desde el endpoint V3 - Predictions
+            # Obtener las predicciones de goles para todos los partidos en vivo
             prediction_url = f"{API_BASE_URL}/predictions?fixture={fixture_id}"
             prediction_res = requests.get(prediction_url, headers=HEADERS)
             prediction_data = prediction_res.json().get('response', {})
