@@ -2,7 +2,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 import os
-from datetime import datetime
+from dotenv import load_dotenv
+
+# Cargar las variables de entorno desde un archivo .env
+load_dotenv()
 
 # Inicializamos la aplicación FastAPI
 app = FastAPI()
@@ -10,10 +13,10 @@ app = FastAPI()
 # Configuración de CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permite el acceso desde cualquier dominio
+    allow_origins=["*"],  # Permitir cualquier origen
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Permitir todos los métodos HTTP
+    allow_headers=["*"],  # Permitir todos los encabezados
 )
 
 # Ruta principal de la API
@@ -31,6 +34,68 @@ HEADERS = {
 }
 
 # Función para obtener las estadísticas de un partido
+def fetch_statistics(fixture_id):
+    url = f"{API_BASE_URL}/fixtures/statistics?fixture={fixture_id}"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print("❌ ERROR STATS:", response.status_code, response.text)
+        return {}
+
+    stats = response.json().get("response", [])
+    pressure_data = {"home": {}, "away": {}}
+
+    for idx, team_stats in enumerate(stats):
+        side = "home" if idx == 0 else "away"
+        for stat in team_stats.get("statistics", []):
+            name = stat.get("type", "").lower()
+            value = stat.get("value", 0) or 0
+
+            if "total shots" in name:
+                pressure_data[side]["shots"] = int(value)
+            elif "shots on goal" in name:
+                pressure_data[side]["shots_on"] = int(value)
+            elif "dangerous attacks" in name:
+                pressure_data[side]["dangerous"] = int(value)
+
+    return pressure_data
+
+# Función para calcular la presión ofensiva
+def calculate_pressure(raw, minute):
+    def ipo(data):
+        return (data.get("dangerous", 0) * 2 + data.get("shots", 0) * 1.5 + data.get("shots_on", 0) * 2.5) / (minute or 1)
+
+    home_val = ipo(raw.get("home", {}))
+    away_val = ipo(raw.get("away", {}))
+    total = home_val + away_val or 1
+    return {
+        "home": round(home_val / total * 100),
+        "away": round(away_val / total * 100)
+    }
+
+# Función para estimar el cansancio de los jugadores
+def calculate_fatigue(pressure, minute):
+    def estimate(p):
+        if minute < 30:
+            return "Baja"
+        elif p > 60:
+            return "Alta"
+        elif p > 40:
+            return "Moderada"
+        return "Baja"
+    return {
+        "home": estimate(pressure["home"]),
+        "away": estimate(pressure["away"])
+    }
+
+# Función para simular los siguientes 10 minutos
+def simulate_next_10min(rhythm, goals):
+    if rhythm == "Alto" and (goals["home"] + goals["away"]) >= 1:
+        return "⚠️ Posible gol"
+    elif rhythm == "Bajo" and (goals["home"] + goals["away"]) == 0:
+        return "✅ Sin peligro"
+    return "🔄 Difícil de predecir"
+
+# Función para obtener los partidos en vivo y sus predicciones
 @app.get("/live-predictions")
 def get_live_predictions():
     url = f"{API_BASE_URL}/fixtures?live=all"
