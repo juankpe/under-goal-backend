@@ -1,7 +1,8 @@
-version: 1
 services:
-  - name: under-goal-api
+  - type: web
+    name: under-goal
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
-    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    instanceType: free
+    region: oregon
