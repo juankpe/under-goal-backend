@@ -1,11 +1,8 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 import requests
 import os
-from dotenv import load_dotenv
-
-# Cargar las variables de entorno desde un archivo .env
-load_dotenv()
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Dict
 
 # Inicializamos la aplicación FastAPI
 app = FastAPI()
@@ -13,16 +10,11 @@ app = FastAPI()
 # Configuración de CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permitir cualquier origen
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Permitir todos los métodos HTTP
-    allow_headers=["*"],  # Permitir todos los encabezados
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-
-# Ruta principal de la API
-@app.get("/")
-def root():
-    return {"status": "OK", "message": "Under Goal API está funcionando"}
 
 # Obtener la clave de API desde las variables de entorno
 API_KEY = os.getenv("RAPIDAPI_KEY")
@@ -33,8 +25,13 @@ HEADERS = {
     "X-RapidAPI-Host": API_HOST
 }
 
+# Ruta principal de la API
+@app.get("/")
+def root():
+    return {"status": "OK", "message": "Under Goal API está funcionando"}
+
 # Función para obtener las estadísticas de un partido
-def fetch_statistics(fixture_id):
+def fetch_statistics(fixture_id: int) -> Dict:
     url = f"{API_BASE_URL}/fixtures/statistics?fixture={fixture_id}"
     response = requests.get(url, headers=HEADERS)
     if response.status_code != 200:
@@ -60,7 +57,7 @@ def fetch_statistics(fixture_id):
     return pressure_data
 
 # Función para calcular la presión ofensiva
-def calculate_pressure(raw, minute):
+def calculate_pressure(raw: Dict, minute: int) -> Dict:
     def ipo(data):
         return (data.get("dangerous", 0) * 2 + data.get("shots", 0) * 1.5 + data.get("shots_on", 0) * 2.5) / (minute or 1)
 
@@ -73,7 +70,7 @@ def calculate_pressure(raw, minute):
     }
 
 # Función para estimar el cansancio de los jugadores
-def calculate_fatigue(pressure, minute):
+def calculate_fatigue(pressure: Dict, minute: int) -> Dict:
     def estimate(p):
         if minute < 30:
             return "Baja"
@@ -88,7 +85,7 @@ def calculate_fatigue(pressure, minute):
     }
 
 # Función para simular los siguientes 10 minutos
-def simulate_next_10min(rhythm, goals):
+def simulate_next_10min(rhythm: str, goals: Dict) -> str:
     if rhythm == "Alto" and (goals["home"] + goals["away"]) >= 1:
         return "⚠️ Posible gol"
     elif rhythm == "Bajo" and (goals["home"] + goals["away"]) == 0:
