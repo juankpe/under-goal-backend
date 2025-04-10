@@ -119,7 +119,10 @@ def simulate_next_10min(pressure: dict, goals: dict) -> str:
 def get_live_predictions():
     try:
         url = f"{API_BASE_URL}/fixtures?live=all"
+        print('Consultando:', url)  # Imprime la URL de la API
         res = requests.get(url, headers=HEADERS)
+        print('Respuesta API:', res.json())  # Imprime la respuesta completa de la API
+
         if res.status_code != 200:
             raise HTTPException(status_code=500, detail=f"Error RapidAPI: {res.status_code}, {res.text}")
 
