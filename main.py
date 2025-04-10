@@ -6,6 +6,7 @@ import urllib.parse
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
+import traceback
 
 app = FastAPI()
 
@@ -106,48 +107,52 @@ def simulate_next_10min(pressure: dict, goals: dict) -> str:
 
 @app.get("/live-predictions")
 def get_live_predictions():
-    url = f"{API_BASE_URL}/fixtures?live=all"
-    res = requests.get(url, headers=HEADERS)
-    if res.status_code != 200:
-        raise HTTPException(status_code=500, detail="No se pudo obtener fixtures")
+    try:
+        url = f"{API_BASE_URL}/fixtures?live=all"
+        res = requests.get(url, headers=HEADERS)
+        if res.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"Error RapidAPI: {res.status_code}, {res.text}")
 
-    fixtures = res.json().get("response", [])
-    results = []
+        fixtures = res.json().get("response", [])
+        results = []
 
-    for match in fixtures:
-        fixture_id = match["fixture"]["id"]
-        stats = fetch_statistics(fixture_id)
-        pressure = stats.get("pressure", {})
-        fatigue = calculate_fatigue(pressure, match["fixture"]["status"].get("elapsed", 0))
-        next_10 = simulate_next_10min(pressure, match.get("goals", {}))
+        for match in fixtures:
+            fixture_id = match["fixture"]["id"]
+            stats = fetch_statistics(fixture_id)
+            pressure = stats.get("pressure", {})
+            fatigue = calculate_fatigue(pressure, match["fixture"]["status"].get("elapsed", 0))
+            next_10 = simulate_next_10min(pressure, match.get("goals", {}))
 
-        results.append({
-            "fixture_id": fixture_id,
-            "minute": match["fixture"]["status"].get("elapsed", 0),
-            "second": 0,
-            "added_time": match["fixture"]["status"].get("extra", 0),
-            "league": match["league"]["name"],
-            "teams": {
-                "home": {
-                    "name": match["teams"]["home"]["name"],
-                    "logo": match["teams"]["home"]["logo"]
+            results.append({
+                "fixture_id": fixture_id,
+                "minute": match["fixture"]["status"].get("elapsed", 0),
+                "second": 0,
+                "added_time": match["fixture"]["status"].get("extra", 0) or 0,
+                "league": match["league"].get("name", "Unknown League"),
+                "teams": {
+                    "home": {
+                        "name": match["teams"]["home"].get("name", ""),
+                        "logo": match["teams"]["home"].get("logo", "")
+                    },
+                    "away": {
+                        "name": match["teams"]["away"].get("name", ""),
+                        "logo": match["teams"]["away"].get("logo", "")
+                    }
                 },
-                "away": {
-                    "name": match["teams"]["away"]["name"],
-                    "logo": match["teams"]["away"]["logo"]
-                }
-            },
-            "goals": match["goals"],
-            "statistics": {
-                "pressure": pressure,
-                "free_kicks": stats.get("free_kicks", {}),
-                "dangerous_attacks": stats.get("dangerous_attacks", {}),
-                "possession": stats.get("possession", {})
-            },
-            "corners": stats.get("corners", {}),
-            "prediction": "Riesgo alto" if match["goals"]["home"] + match["goals"]["away"] >= 3 else "Bajo riesgo",
-            "fatigue": fatigue,
-            "next_10min": next_10
-        })
+                "goals": match.get("goals", {}),
+                "statistics": {
+                    "pressure": pressure,
+                    "free_kicks": stats.get("free_kicks", {}),
+                    "dangerous_attacks": stats.get("dangerous_attacks", {}),
+                    "possession": stats.get("possession", {})
+                },
+                "corners": stats.get("corners", {}),
+                "prediction": "Riesgo alto" if match["goals"]["home"] + match["goals"]["away"] >= 3 else "Bajo riesgo",
+                "fatigue": fatigue,
+                "next_10min": next_10
+            })
 
-    return {"matches": results}
+        return {"matches": results}
+
+    except Exception as e:
+        return {"error": str(e), "trace": traceback.format_exc()}
