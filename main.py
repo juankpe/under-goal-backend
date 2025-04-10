@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 import traceback
+import threading
+import time
 
 app = FastAPI()
 
@@ -125,8 +127,10 @@ def get_live_predictions():
             raise HTTPException(status_code=500, detail=f"Error RapidAPI: {res.status_code}, {res.text}")
 
         fixtures = res.json().get("response", [])
-        results = []
+        if not fixtures:
+            return {"matches": [], "message": "No hay partidos activos en este momento"}
 
+        results = []
         for match in fixtures:
             fixture_id = match["fixture"]["id"]
             stats = fetch_statistics(fixture_id)
@@ -180,3 +184,19 @@ def get_live_predictions():
 
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
+
+# ⏳ Keep-alive (auto ping para Render cada 2 min)
+def keep_alive():
+    def ping():
+        while True:
+            try:
+                requests.get("https://under-goal-backend.onrender.com/")
+            except Exception:
+                pass
+            time.sleep(120)  # cada 2 minutos
+
+    thread = threading.Thread(target=ping)
+    thread.daemon = True
+    thread.start()
+
+keep_alive()
