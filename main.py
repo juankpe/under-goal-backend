@@ -1,4 +1,3 @@
-# backend/main.py actualizado para extraer más datos de RapidAPI y usar Redis
 import os
 import json
 import redis
@@ -65,6 +64,7 @@ def fetch_statistics(fixture_id: int) -> dict:
         "total_shots": {"home": 0, "away": 0},
         "shots_on_goal": {"home": 0, "away": 0},
         "xg": {"home": 0.0, "away": 0.0},
+        "api_prediction": "N/A"
     }
 
     for idx, team_stats in enumerate(stats):
@@ -133,6 +133,8 @@ def get_live_predictions():
             fatigue = calculate_fatigue(pressure, match["fixture"]["status"].get("elapsed", 0))
             next_10 = simulate_next_10min(pressure, match.get("goals", {}))
 
+            api_prediction = stats.get("api_prediction", "N/A")
+
             results.append({
                 "fixture_id": fixture_id,
                 "minute": match["fixture"]["status"].get("elapsed", 0),
@@ -162,7 +164,8 @@ def get_live_predictions():
                 },
                 "prediction": "Riesgo alto" if match["goals"]["home"] + match["goals"]["away"] >= 3 else "Bajo riesgo",
                 "fatigue": fatigue,
-                "next_10min": next_10
+                "next_10min": next_10,
+                "api_prediction": api_prediction
             })
 
         return {"matches": results}
