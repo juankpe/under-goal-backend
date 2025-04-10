@@ -16,9 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Clave de API de RapidAPI
-API_KEY = "132239f6a2mshdb90976390caecfp19239ejsneb1c3e217797"  # Tu clave de API de RapidAPI
-API_HOST = "api-football-v1.p.rapidapi.com"
+# Obtener la clave de API desde las variables de entorno
+API_KEY = os.getenv("RAPIDAPI_KEY")
+API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
 API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
 HEADERS = {
     "X-RapidAPI-Key": API_KEY,
@@ -29,6 +29,20 @@ HEADERS = {
 @app.get("/")
 def root():
     return {"status": "OK", "message": "Under Goal API está funcionando"}
+
+# Función para obtener la información de la liga
+def fetch_league_name(fixture_id: int) -> str:
+    url = f"{API_BASE_URL}/fixtures?id={fixture_id}"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print("❌ ERROR LEAGUE:", response.status_code, response.text)
+        return "Unknown League"
+    
+    data = response.json().get("response", [])
+    if data:
+        league_name = data[0].get("league", {}).get("name", "Unknown League")
+        return league_name
+    return "Unknown League"
 
 # Función para obtener las estadísticas de un partido
 def fetch_statistics(fixture_id: int) -> Dict:
@@ -120,6 +134,9 @@ def get_live_predictions():
         fatigue = calculate_fatigue(pressure, minute)
         next_10 = simulate_next_10min(pressure, goals)
 
+        # Obtener el nombre de la liga
+        league_name = fetch_league_name(fixture_id)
+
         # Predicción de goles
         prediction = "Bajo riesgo"
         if minute >= 60 and (goals.get("home", 0) + goals.get("away", 0)) >= 3:
@@ -130,6 +147,7 @@ def get_live_predictions():
         results.append({
             "fixture_id": fixture_id,
             "minute": minute,
+            "league": league_name,  # Nombre de la liga
             "teams": {
                 "home": {
                     "name": teams.get("home", {}).get("name"),
