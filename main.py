@@ -136,8 +136,8 @@ def get_live_predictions():
 
             prediction_url = f"{API_BASE_URL}/predictions?fixture={fixture_id}"
             prediction_res = requests.get(prediction_url, headers=HEADERS)
-            prediction_data = prediction_res.json().get('response', {})
-            api_prediction = prediction_data.get('predictions', 'N/A')
+            prediction_data = prediction_res.json().get('response', [])
+            api_prediction = prediction_data[0]['predictions'] if isinstance(prediction_data, list) and prediction_data else 'N/A'
 
             results.append({
                 "fixture_id": fixture_id,
