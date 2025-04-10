@@ -1,13 +1,15 @@
-import requests
+# backend/main.py
 import os
+import json
+import redis
+import urllib.parse
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict
+import requests
 
-# Inicializamos la aplicación FastAPI
 app = FastAPI()
 
-# Configuración de CORS
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +18,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Obtener la clave de API desde las variables de entorno
+# Redis Cloud via Upstash
+redis_url = os.getenv("REDIS_URL")
+parsed_url = urllib.parse.urlparse(redis_url)
+
+redis_client = redis.Redis(
+    host=parsed_url.hostname,
+    port=parsed_url.port,
+    password=parsed_url.password,
+    ssl=True,
+    decode_responses=True
+)
+
+# RapidAPI (API-FOOTBALL)
 API_KEY = os.getenv("RAPIDAPI_KEY")
 API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
 API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
@@ -25,144 +39,113 @@ HEADERS = {
     "X-RapidAPI-Host": API_HOST
 }
 
-# Ruta principal de la API
 @app.get("/")
 def root():
-    return {"status": "OK", "message": "Under Goal API está funcionando"}
+    return {"status": "OK", "message": "API Under Goal usando API-FOOTBALL (RapidAPI)"}
 
-# Función para obtener la información de la liga
-def fetch_league_name(fixture_id: int) -> str:
-    url = f"{API_BASE_URL}/fixtures?id={fixture_id}"
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code != 200:
-        print("❌ ERROR LEAGUE:", response.status_code, response.text)
-        return "Unknown League"
-    
-    data = response.json().get("response", [])
-    if data:
-        league_name = data[0].get("league", {}).get("name", "Unknown League")
-        return league_name
-    return "Unknown League"
+def fetch_statistics(fixture_id: int) -> dict:
+    cache_key = f"stats:{fixture_id}"
+    cached_data = redis_client.get(cache_key)
+    if cached_data:
+        return json.loads(cached_data)
 
-# Función para obtener las estadísticas de un partido
-def fetch_statistics(fixture_id: int) -> Dict:
     url = f"{API_BASE_URL}/fixtures/statistics?fixture={fixture_id}"
     response = requests.get(url, headers=HEADERS)
     if response.status_code != 200:
-        print("❌ ERROR STATS:", response.status_code, response.text)
         return {}
 
     stats = response.json().get("response", [])
-    pressure_data = {"home": {}, "away": {}}
+    parsed = {
+        "pressure": {"home": 0, "away": 0},
+        "free_kicks": {"home": 0, "away": 0},
+        "dangerous_attacks": {"home": 0, "away": 0},
+        "possession": {"home": 0, "away": 0},
+        "corners": {"home": 0, "away": 0}
+    }
 
     for idx, team_stats in enumerate(stats):
         side = "home" if idx == 0 else "away"
         for stat in team_stats.get("statistics", []):
             name = stat.get("type", "").lower()
             value = stat.get("value", 0) or 0
-
-            if "total shots" in name:
-                pressure_data[side]["shots"] = int(value)
-            elif "shots on goal" in name:
-                pressure_data[side]["shots_on"] = int(value)
+            if "shots on goal" in name:
+                parsed["pressure"][side] += int(value) * 2.5
+            elif "total shots" in name:
+                parsed["pressure"][side] += int(value) * 1.5
             elif "dangerous attacks" in name:
-                pressure_data[side]["dangerous"] = int(value)
+                parsed["dangerous_attacks"][side] = int(value)
+                parsed["pressure"][side] += int(value) * 2
+            elif "possession" in name and isinstance(value, str):
+                parsed["possession"][side] = int(value.replace("%", ""))
+            elif "free kicks" in name:
+                parsed["free_kicks"][side] = int(value)
+            elif "corners" in name:
+                parsed["corners"][side] = int(value)
 
-    return pressure_data
+    total = parsed["pressure"]["home"] + parsed["pressure"]["away"] or 1
+    parsed["pressure"]["home"] = round(parsed["pressure"]["home"] / total * 100)
+    parsed["pressure"]["away"] = round(parsed["pressure"]["away"] / total * 100)
 
-# Función para calcular la presión ofensiva
-def calculate_pressure(raw: Dict, minute: int) -> Dict:
-    def ipo(data):
-        return (data.get("dangerous", 0) * 2 + data.get("shots", 0) * 1.5 + data.get("shots_on", 0) * 2.5) / (minute or 1)
+    redis_client.setex(cache_key, 15, json.dumps(parsed))
+    return parsed
 
-    home_val = ipo(raw.get("home", {}))
-    away_val = ipo(raw.get("away", {}))
-    total = home_val + away_val or 1
+def calculate_fatigue(pressure: dict, minute: int) -> dict:
+    def level(p): return "Alta" if p > 60 else "Moderada" if p > 40 else "Baja"
     return {
-        "home": round(home_val / total * 100),
-        "away": round(away_val / total * 100)
+        "home": level(pressure["home"]),
+        "away": level(pressure["away"])
     }
 
-# Función para estimar el cansancio de los jugadores
-def calculate_fatigue(pressure: Dict, minute: int) -> Dict:
-    def estimate(p):
-        if minute < 30:
-            return "Baja"
-        elif p > 60:
-            return "Alta"
-        elif p > 40:
-            return "Moderada"
-        return "Baja"
-    return {
-        "home": estimate(pressure["home"]),
-        "away": estimate(pressure["away"])
-    }
-
-# Función para simular los siguientes 10 minutos
-def simulate_next_10min(rhythm: str, goals: Dict) -> str:
-    if rhythm == "Alto" and (goals["home"] + goals["away"]) >= 1:
+def simulate_next_10min(pressure: dict, goals: dict) -> str:
+    total_goals = goals.get("home", 0) + goals.get("away", 0)
+    if max(pressure["home"], pressure["away"]) > 60 and total_goals >= 1:
         return "⚠️ Posible gol"
-    elif rhythm == "Bajo" and (goals["home"] + goals["away"]) == 0:
+    elif total_goals == 0 and max(pressure["home"], pressure["away"]) < 40:
         return "✅ Sin peligro"
     return "🔄 Difícil de predecir"
 
-# Función para obtener los partidos en vivo y sus predicciones
 @app.get("/live-predictions")
 def get_live_predictions():
     url = f"{API_BASE_URL}/fixtures?live=all"
-    response = requests.get(url, headers=HEADERS)
-    
-    if response.status_code != 200:
-        print("❌ ERROR RapidAPI:", response.status_code)
-        print("➡️ Texto:", response.text)
-        raise HTTPException(status_code=500, detail="Error al obtener datos de partidos en vivo")
+    res = requests.get(url, headers=HEADERS)
+    if res.status_code != 200:
+        raise HTTPException(status_code=500, detail="No se pudo obtener fixtures")
 
-    data = response.json()
-    fixtures = data.get("response", [])
+    fixtures = res.json().get("response", [])
     results = []
 
     for match in fixtures:
-        fixture = match.get("fixture", {})
-        teams = match.get("teams", {})
-        goals = match.get("goals", {})
-        fixture_id = fixture.get("id")
-        minute = fixture.get("status", {}).get("elapsed", 0)
-
-        # Obtener estadísticas de cada partido
+        fixture_id = match["fixture"]["id"]
         stats = fetch_statistics(fixture_id)
-        pressure = calculate_pressure(stats.get("pressure_raw", {}), minute)
-        fatigue = calculate_fatigue(pressure, minute)
-        next_10 = simulate_next_10min(pressure, goals)
-
-        # Obtener el nombre de la liga
-        league_name = fetch_league_name(fixture_id)
-
-        # Predicción de goles
-        prediction = "Bajo riesgo"
-        if minute >= 60 and (goals.get("home", 0) + goals.get("away", 0)) >= 3:
-            prediction = "Riesgo alto"
-        elif minute >= 30 and (goals.get("home", 0) + goals.get("away", 0)) >= 2:
-            prediction = "Riesgo moderado"
+        pressure = stats.get("pressure", {})
+        fatigue = calculate_fatigue(pressure, match["fixture"]["status"].get("elapsed", 0))
+        next_10 = simulate_next_10min(pressure, match.get("goals", {}))
 
         results.append({
             "fixture_id": fixture_id,
-            "minute": minute,
-            "league": league_name,  # Nombre de la liga
+            "minute": match["fixture"]["status"].get("elapsed", 0),
+            "second": 0,
+            "added_time": match["fixture"]["status"].get("extra", 0),
+            "league": match["league"]["name"],
             "teams": {
                 "home": {
-                    "name": teams.get("home", {}).get("name"),
-                    "logo": teams.get("home", {}).get("logo")
+                    "name": match["teams"]["home"]["name"],
+                    "logo": match["teams"]["home"]["logo"]
                 },
                 "away": {
-                    "name": teams.get("away", {}).get("name"),
-                    "logo": teams.get("away", {}).get("logo")
+                    "name": match["teams"]["away"]["name"],
+                    "logo": match["teams"]["away"]["logo"]
                 }
             },
-            "goals": goals,
+            "goals": match["goals"],
             "statistics": {
-                "pressure": pressure
+                "pressure": pressure,
+                "free_kicks": stats.get("free_kicks", {}),
+                "dangerous_attacks": stats.get("dangerous_attacks", {}),
+                "possession": stats.get("possession", {})
             },
-            "prediction": prediction,
+            "corners": stats.get("corners", {}),
+            "prediction": "Riesgo alto" if match["goals"]["home"] + match["goals"]["away"] >= 3 else "Bajo riesgo",
             "fatigue": fatigue,
             "next_10min": next_10
         })
