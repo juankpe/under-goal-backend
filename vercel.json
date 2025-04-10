@@ -1,22 +1,7 @@
-{
-  "version": 2,
-  "builds": [
-    {
-      "src": "main.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "250mb"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/live-predictions",
-      "dest": "/main.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/main.py"
-    }
-  ]
-}
+version: 1
+services:
+  - name: under-goal-api
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python main.py"
+    plan: free
