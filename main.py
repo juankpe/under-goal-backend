@@ -1,4 +1,4 @@
-# backend/main.py
+# backend/main.py actualizado para extraer más datos de RapidAPI y usar Redis
 import os
 import json
 import redis
@@ -61,7 +61,10 @@ def fetch_statistics(fixture_id: int) -> dict:
         "free_kicks": {"home": 0, "away": 0},
         "dangerous_attacks": {"home": 0, "away": 0},
         "possession": {"home": 0, "away": 0},
-        "corners": {"home": 0, "away": 0}
+        "corners": {"home": 0, "away": 0},
+        "total_shots": {"home": 0, "away": 0},
+        "shots_on_goal": {"home": 0, "away": 0},
+        "xg": {"home": 0.0, "away": 0.0},
     }
 
     for idx, team_stats in enumerate(stats):
@@ -70,8 +73,10 @@ def fetch_statistics(fixture_id: int) -> dict:
             name = stat.get("type", "").lower()
             value = stat.get("value", 0) or 0
             if "shots on goal" in name:
+                parsed["shots_on_goal"][side] = int(value)
                 parsed["pressure"][side] += int(value) * 2.5
             elif "total shots" in name:
+                parsed["total_shots"][side] = int(value)
                 parsed["pressure"][side] += int(value) * 1.5
             elif "dangerous attacks" in name:
                 parsed["dangerous_attacks"][side] = int(value)
@@ -82,6 +87,11 @@ def fetch_statistics(fixture_id: int) -> dict:
                 parsed["free_kicks"][side] = int(value)
             elif "corners" in name:
                 parsed["corners"][side] = int(value)
+            elif "expected goals" in name or "xg" in name:
+                try:
+                    parsed["xg"][side] = float(value)
+                except:
+                    parsed["xg"][side] = 0.0
 
     total = parsed["pressure"]["home"] + parsed["pressure"]["away"] or 1
     parsed["pressure"]["home"] = round(parsed["pressure"]["home"] / total * 100)
@@ -144,9 +154,12 @@ def get_live_predictions():
                     "pressure": pressure,
                     "free_kicks": stats.get("free_kicks", {}),
                     "dangerous_attacks": stats.get("dangerous_attacks", {}),
-                    "possession": stats.get("possession", {})
+                    "possession": stats.get("possession", {}),
+                    "corners": stats.get("corners", {}),
+                    "total_shots": stats.get("total_shots", {}),
+                    "shots_on_goal": stats.get("shots_on_goal", {}),
+                    "xg": stats.get("xg", {})
                 },
-                "corners": stats.get("corners", {}),
                 "prediction": "Riesgo alto" if match["goals"]["home"] + match["goals"]["away"] >= 3 else "Bajo riesgo",
                 "fatigue": fatigue,
                 "next_10min": next_10
