@@ -64,7 +64,8 @@ def fetch_statistics(fixture_id: int) -> dict:
         "total_shots": {"home": 0, "away": 0},
         "shots_on_goal": {"home": 0, "away": 0},
         "xg": {"home": 0.0, "away": 0.0},
-        "api_prediction": "N/A"
+        "api_prediction": "N/A",
+        "next_goals": "N/A"
     }
 
     for idx, team_stats in enumerate(stats):
@@ -122,7 +123,6 @@ def get_live_predictions():
         print('Consultando:', url)  # Imprime la URL de la API
         res = requests.get(url, headers=HEADERS)
         print('Respuesta API:', res.json())  # Imprime la respuesta completa de la API
-        print('Datos completos de Predicciones:', res.json().get('response', 'No predicciones encontradas'))  # Muestra los datos completos de predicciones
 
         if res.status_code != 200:
             raise HTTPException(status_code=500, detail=f"Error RapidAPI: {res.status_code}, {res.text}")
@@ -137,7 +137,9 @@ def get_live_predictions():
             fatigue = calculate_fatigue(pressure, match["fixture"]["status"].get("elapsed", 0))
             next_10 = simulate_next_10min(pressure, match.get("goals", {}))
 
+            # Obtener la predicción de goles si está disponible
             api_prediction = stats.get("api_prediction", "N/A")
+            next_goals = stats.get("next_goals", "N/A")
 
             results.append({
                 "fixture_id": fixture_id,
@@ -169,7 +171,8 @@ def get_live_predictions():
                 "prediction": "Riesgo alto" if match["goals"]["home"] + match["goals"]["away"] >= 3 else "Bajo riesgo",
                 "fatigue": fatigue,
                 "next_10min": next_10,
-                "api_prediction": api_prediction
+                "api_prediction": api_prediction,
+                "next_goals": next_goals
             })
 
         return {"matches": results}
