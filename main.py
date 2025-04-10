@@ -120,10 +120,7 @@ def simulate_next_10min(pressure: dict, goals: dict) -> str:
 def get_live_predictions():
     try:
         url = f"{API_BASE_URL}/fixtures?live=all"
-        print('Consultando:', url)  # Imprime la URL de la API
         res = requests.get(url, headers=HEADERS)
-        print('Respuesta API:', res.json())  # Imprime la respuesta completa de la API
-
         if res.status_code != 200:
             raise HTTPException(status_code=500, detail=f"Error RapidAPI: {res.status_code}, {res.text}")
 
@@ -137,7 +134,6 @@ def get_live_predictions():
             fatigue = calculate_fatigue(pressure, match["fixture"]["status"].get("elapsed", 0))
             next_10 = simulate_next_10min(pressure, match.get("goals", {}))
 
-            # Obtener las predicciones de goles para todos los partidos en vivo
             prediction_url = f"{API_BASE_URL}/predictions?fixture={fixture_id}"
             prediction_res = requests.get(prediction_url, headers=HEADERS)
             prediction_data = prediction_res.json().get('response', {})
@@ -147,8 +143,12 @@ def get_live_predictions():
                 "fixture_id": fixture_id,
                 "minute": match["fixture"]["status"].get("elapsed", 0),
                 "second": 0,
-                "added_time": match["fixture"]["status"].get("extra", 0) or 0,
-                "league": match["league"].get("name", "Unknown League"),
+                "extra_time": match["fixture"]["status"].get("extra", 0) or 0,
+                "league": {
+                    "name": match["league"].get("name", ""),
+                    "country": match["league"].get("country", ""),
+                    "round": match["league"].get("round", "")
+                },
                 "teams": {
                     "home": {
                         "name": match["teams"]["home"].get("name", ""),
