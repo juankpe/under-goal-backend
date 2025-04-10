@@ -103,23 +103,9 @@ def fetch_statistics(fixture_id: int) -> dict:
     redis_client.setex(cache_key, 15, json.dumps(parsed))
     return parsed
 
-def calculate_fatigue(pressure: dict, minute: int) -> dict:
-    def level(p): return "Alta" if p > 60 else "Moderada" if p > 40 else "Baja"
-    return {
-        "home": level(pressure["home"]),
-        "away": level(pressure["away"])
-    }
-
-def simulate_next_10min(pressure: dict, goals: dict) -> str:
-    total_goals = goals.get("home", 0) + goals.get("away", 0)
-    if max(pressure["home"], pressure["away"]) > 60 and total_goals >= 1:
-        return "⚠️ Posible gol"
-    elif total_goals == 0 and max(pressure["home"], pressure["away"]) < 40:
-        return "✅ Sin peligro"
-    return "🔄 Difícil de predecir"
-
-@app.get("/live-predictions")
-def get_live_predictions():
+# Nuevo endpoint dinámico para actualizar solo los datos clave de cada partido
+@app.get("/live-updates")
+def get_live_updates():
     try:
         url = f"{API_BASE_URL}/fixtures?live=all"
         res = requests.get(url, headers=HEADERS)
@@ -127,60 +113,25 @@ def get_live_predictions():
             raise HTTPException(status_code=500, detail=f"Error RapidAPI: {res.status_code}, {res.text}")
 
         fixtures = res.json().get("response", [])
-        if not fixtures:
-            return {"matches": [], "message": "No hay partidos activos en este momento"}
+        updates = []
 
-        results = []
         for match in fixtures:
             fixture_id = match["fixture"]["id"]
             stats = fetch_statistics(fixture_id)
-            pressure = stats.get("pressure", {})
-            fatigue = calculate_fatigue(pressure, match["fixture"]["status"].get("elapsed", 0))
-            next_10 = simulate_next_10min(pressure, match.get("goals", {}))
-
-            prediction_url = f"{API_BASE_URL}/predictions?fixture={fixture_id}"
-            prediction_res = requests.get(prediction_url, headers=HEADERS)
-            prediction_data = prediction_res.json().get('response', [])
-            api_prediction = prediction_data[0]['predictions'] if isinstance(prediction_data, list) and prediction_data else 'N/A'
-
-            results.append({
+            updates.append({
                 "fixture_id": fixture_id,
                 "minute": match["fixture"]["status"].get("elapsed", 0),
-                "second": 0,
                 "extra_time": match["fixture"]["status"].get("extra", 0) or 0,
-                "league": {
-                    "name": match["league"].get("name", ""),
-                    "country": match["league"].get("country", ""),
-                    "round": match["league"].get("round", "")
-                },
-                "teams": {
-                    "home": {
-                        "name": match["teams"]["home"].get("name", ""),
-                        "logo": match["teams"]["home"].get("logo", "")
-                    },
-                    "away": {
-                        "name": match["teams"]["away"].get("name", ""),
-                        "logo": match["teams"]["away"].get("logo", "")
-                    }
-                },
                 "goals": match.get("goals", {}),
-                "statistics": {
-                    "pressure": pressure,
-                    "free_kicks": stats.get("free_kicks", {}),
-                    "dangerous_attacks": stats.get("dangerous_attacks", {}),
-                    "possession": stats.get("possession", {}),
-                    "corners": stats.get("corners", {}),
-                    "total_shots": stats.get("total_shots", {}),
-                    "shots_on_goal": stats.get("shots_on_goal", {}),
-                    "xg": stats.get("xg", {})
-                },
-                "prediction": "Riesgo alto" if match["goals"]["home"] + match["goals"]["away"] >= 3 else "Bajo riesgo",
-                "fatigue": fatigue,
-                "next_10min": next_10,
-                "api_prediction": api_prediction
+                "free_kicks": stats.get("free_kicks", {}),
+                "dangerous_attacks": stats.get("dangerous_attacks", {}),
+                "corners": stats.get("corners", {}),
+                "shots_on_goal": stats.get("shots_on_goal", {}),
+                "total_shots": stats.get("total_shots", {}),
+                "xg": stats.get("xg", {})
             })
 
-        return {"matches": results}
+        return {"updates": updates}
 
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
