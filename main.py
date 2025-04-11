@@ -29,36 +29,39 @@ HEADERS = {
 
 # Initialize SQLite database
 def init_db():
-    with sqlite3.connect(DATABASE) as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS statistics (
-                fixture_id INTEGER PRIMARY KEY,
-                pressure_home INTEGER,
-                pressure_away INTEGER,
-                free_kicks_home INTEGER,
-                free_kicks_away INTEGER,
-                dangerous_attacks_home INTEGER,
-                dangerous_attacks_away INTEGER,
-                possession_home INTEGER,
-                possession_away INTEGER,
-                corners_home INTEGER,
-                corners_away INTEGER,
-                total_shots_home INTEGER,
-                total_shots_away INTEGER,
-                shots_on_goal_home INTEGER,
-                shots_on_goal_away INTEGER,
-                xg_home REAL,
-                xg_away REAL,
-                api_prediction TEXT,
-                next_goals TEXT
-            )
-        ''')
-        conn.commit()
+    try:
+        with sqlite3.connect(DATABASE) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS statistics (
+                    fixture_id INTEGER PRIMARY KEY,
+                    pressure_home INTEGER,
+                    pressure_away INTEGER,
+                    free_kicks_home INTEGER,
+                    free_kicks_away INTEGER,
+                    dangerous_attacks_home INTEGER,
+                    dangerous_attacks_away INTEGER,
+                    possession_home INTEGER,
+                    possession_away INTEGER,
+                    corners_home INTEGER,
+                    corners_away INTEGER,
+                    total_shots_home INTEGER,
+                    total_shots_away INTEGER,
+                    shots_on_goal_home INTEGER,
+                    shots_on_goal_away INTEGER,
+                    xg_home REAL,
+                    xg_away REAL,
+                    api_prediction TEXT,
+                    next_goals TEXT
+                )
+            ''')
+            conn.commit()
+        print("Base de datos inicializada correctamente.")
+    except Exception as e:
+        print(f"Error al inicializar la base de datos: {str(e)}")
 
 # Fetch statistics and store in SQLite
 def fetch_statistics(fixture_id: int) -> dict:
-    # Check if data exists in the database
     with sqlite3.connect(DATABASE) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM statistics WHERE fixture_id = ?", (fixture_id,))
@@ -186,3 +189,5 @@ def get_live_updates():
     except Exception as e:
         return {"error": str(e)}
 
+# Initialize DB at the start
+init_db()
