@@ -11,7 +11,7 @@ import time
 
 app = FastAPI()
 
-# CORS
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Redis Cloud via Upstash
+# Redis Configuration (Upstash)
 redis_url = os.getenv("REDIS_URL")
 parsed_url = urllib.parse.urlparse(redis_url)
 
@@ -32,7 +32,7 @@ redis_client = redis.Redis(
     decode_responses=True
 )
 
-# RapidAPI (API-FOOTBALL)
+# RapidAPI (API-FOOTBALL) Configuration
 API_KEY = os.getenv("RAPIDAPI_KEY")
 API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
 API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
@@ -43,7 +43,7 @@ HEADERS = {
 
 @app.get("/")
 def root():
-    return {"status": "OK", "message": "API Under Goal usando API-FOOTBALL (RapidAPI)"}
+    return {"status": "OK", "message": "API Under Goal using API-FOOTBALL (RapidAPI)"}
 
 def fetch_statistics(fixture_id: int) -> dict:
     cache_key = f"stats:{fixture_id}"
@@ -100,10 +100,10 @@ def fetch_statistics(fixture_id: int) -> dict:
     parsed["pressure"]["home"] = round(parsed["pressure"]["home"] / total * 100)
     parsed["pressure"]["away"] = round(parsed["pressure"]["away"] / total * 100)
 
-    redis_client.setex(cache_key, 15, json.dumps(parsed))
+    redis_client.setex(cache_key, 15, json.dumps(parsed))  # Cache expires in 15 seconds
     return parsed
 
-# Nuevo endpoint dinámico para actualizar solo los datos clave de cada partido
+# New endpoint to dynamically update only the key data for each match
 @app.get("/live-updates")
 def get_live_updates():
     try:
@@ -136,7 +136,7 @@ def get_live_updates():
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
 
-# ⏳ Keep-alive (auto ping para Render cada 2 min)
+# Keep-alive function to auto-ping Render every 2 minutes to avoid timeouts
 def keep_alive():
     def ping():
         while True:
@@ -144,7 +144,7 @@ def keep_alive():
                 requests.get("https://under-goal-backend.onrender.com/")
             except Exception:
                 pass
-            time.sleep(120)  # cada 2 minutos
+            time.sleep(120)  # Every 2 minutes
 
     thread = threading.Thread(target=ping)
     thread.daemon = True
