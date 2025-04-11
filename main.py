@@ -19,7 +19,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# SQLite Configuration
 DATABASE = "database.db"  # Nombre de la base de datos SQLite
+
+# RapidAPI (API-FOOTBALL) Configuration
+API_KEY = os.getenv("RAPIDAPI_KEY")
+API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
+API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
+HEADERS = {
+    "X-RapidAPI-Key": API_KEY,
+    "X-RapidAPI-Host": API_HOST
+}
 
 # Initialize SQLite database
 def init_db():
@@ -47,18 +57,6 @@ def init_db():
                             next_goals TEXT
                         )''')
         conn.commit()
-
-# Llamar a la función de inicialización para asegurarse de que la base de datos se ha creado
-init_db()
-
-# RapidAPI (API-FOOTBALL) Configuration
-API_KEY = os.getenv("RAPIDAPI_KEY")
-API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
-API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
-HEADERS = {
-    "X-RapidAPI-Key": API_KEY,
-    "X-RapidAPI-Host": API_HOST
-}
 
 # Fetch statistics and store in SQLite
 def fetch_statistics(fixture_id: int) -> dict:
@@ -136,7 +134,7 @@ def fetch_statistics(fixture_id: int) -> dict:
     # Save data to SQLite database
     with sqlite3.connect(DATABASE) as conn:
         cursor = conn.cursor()
-        cursor.execute(""" 
+        cursor.execute("""
             INSERT OR REPLACE INTO statistics (
                 fixture_id, pressure_home, pressure_away, free_kicks_home, free_kicks_away,
                 dangerous_attacks_home, dangerous_attacks_away, possession_home, possession_away,
