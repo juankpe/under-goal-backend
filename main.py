@@ -20,8 +20,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Redis Configuration (Upstash)
-redis_url = os.getenv("REDIS_URL")
+# Redis Configuration (Updated Redis Cloud URL)
+redis_url = "rediss://default:076872a0ccac43d5ac67767e4d66d17f@redis-11539.c82.us-east-1-2.ec2.redns.redis-cloud.com:11539"
 parsed_url = urllib.parse.urlparse(redis_url)
 
 redis_client = redis.Redis(
