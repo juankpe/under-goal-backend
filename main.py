@@ -11,17 +11,17 @@ import time
 
 app = FastAPI()
 
-# CORS Configuration
+# CORS Configuration (Allow requests from any origin)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # You can adjust this to your frontend domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Redis Configuration
-redis_url = os.getenv("REDIS_URL")
+redis_url = os.getenv("REDIS_URL")  # Make sure the REDIS_URL is set as an environment variable
 parsed_url = urllib.parse.urlparse(redis_url)
 
 redis_client = redis.Redis(
@@ -33,7 +33,7 @@ redis_client = redis.Redis(
 )
 
 # RapidAPI (API-FOOTBALL) Configuration
-API_KEY = os.getenv("RAPIDAPI_KEY")
+API_KEY = os.getenv("RAPIDAPI_KEY")  # Make sure RAPIDAPI_KEY is set in the environment variables
 API_HOST = os.getenv("RAPIDAPI_HOST", "api-football-v1.p.rapidapi.com")
 API_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
 HEADERS = {
@@ -46,6 +46,7 @@ def root():
     return {"status": "OK", "message": "API Under Goal using API-FOOTBALL (RapidAPI)"}
 
 def fetch_statistics(fixture_id: int) -> dict:
+    """Fetch match statistics from Redis or API"""
     cache_key = f"stats:{fixture_id}"
     cached_data = redis_client.get(cache_key)
     if cached_data:
@@ -105,11 +106,12 @@ def fetch_statistics(fixture_id: int) -> dict:
 
 @app.get("/live-updates")
 def get_live_updates():
+    """Get live match updates with real-time stats"""
     try:
         url = f"{API_BASE_URL}/fixtures?live=all"
         res = requests.get(url, headers=HEADERS)
         if res.status_code != 200:
-            raise HTTPException(status_code=500, detail=f"Error RapidAPI: {res.status_code}, {res.text}")
+            raise HTTPException(status_code=500, detail=f"Error from RapidAPI: {res.status_code}, {res.text}")
 
         fixtures = res.json().get("response", [])
         updates = []
@@ -135,18 +137,19 @@ def get_live_updates():
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
 
-# Keep-alive function to auto-ping Render every 2 minutes to avoid timeouts
+# Keep-alive function to prevent timeouts in Render (ping every 2 minutes)
 def keep_alive():
     def ping():
         while True:
             try:
-                requests.get("https://under-goal-backend.onrender.com/")
+                requests.get("https://under-goal-backend.onrender.com/")  # Replace with your Render app URL
             except Exception:
                 pass
-            time.sleep(120)  # Every 2 minutes
+            time.sleep(120)  # Sleep for 2 minutes
 
     thread = threading.Thread(target=ping)
     thread.daemon = True
     thread.start()
 
+# Start the keep-alive thread
 keep_alive()
