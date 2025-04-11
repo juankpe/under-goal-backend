@@ -1,12 +1,8 @@
 import os
-import json
 import sqlite3
+import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import requests
-import traceback
-import threading
-import time
 
 app = FastAPI()
 
@@ -19,8 +15,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# SQLite Configuration
-DATABASE = "database.db"  # Nombre de la base de datos SQLite
+# SQLite Database Configuration
+DATABASE = "database.db"
 
 # RapidAPI (API-FOOTBALL) Configuration
 API_KEY = os.getenv("RAPIDAPI_KEY")
@@ -35,27 +31,29 @@ HEADERS = {
 def init_db():
     with sqlite3.connect(DATABASE) as conn:
         cursor = conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS statistics (
-                            fixture_id INTEGER PRIMARY KEY,
-                            pressure_home INTEGER,
-                            pressure_away INTEGER,
-                            free_kicks_home INTEGER,
-                            free_kicks_away INTEGER,
-                            dangerous_attacks_home INTEGER,
-                            dangerous_attacks_away INTEGER,
-                            possession_home INTEGER,
-                            possession_away INTEGER,
-                            corners_home INTEGER,
-                            corners_away INTEGER,
-                            total_shots_home INTEGER,
-                            total_shots_away INTEGER,
-                            shots_on_goal_home INTEGER,
-                            shots_on_goal_away INTEGER,
-                            xg_home REAL,
-                            xg_away REAL,
-                            api_prediction TEXT,
-                            next_goals TEXT
-                        )''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS statistics (
+                fixture_id INTEGER PRIMARY KEY,
+                pressure_home INTEGER,
+                pressure_away INTEGER,
+                free_kicks_home INTEGER,
+                free_kicks_away INTEGER,
+                dangerous_attacks_home INTEGER,
+                dangerous_attacks_away INTEGER,
+                possession_home INTEGER,
+                possession_away INTEGER,
+                corners_home INTEGER,
+                corners_away INTEGER,
+                total_shots_home INTEGER,
+                total_shots_away INTEGER,
+                shots_on_goal_home INTEGER,
+                shots_on_goal_away INTEGER,
+                xg_home REAL,
+                xg_away REAL,
+                api_prediction TEXT,
+                next_goals TEXT
+            )
+        ''')
         conn.commit()
 
 # Fetch statistics and store in SQLite
@@ -134,13 +132,13 @@ def fetch_statistics(fixture_id: int) -> dict:
     # Save data to SQLite database
     with sqlite3.connect(DATABASE) as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(""" 
             INSERT OR REPLACE INTO statistics (
                 fixture_id, pressure_home, pressure_away, free_kicks_home, free_kicks_away,
                 dangerous_attacks_home, dangerous_attacks_away, possession_home, possession_away,
                 corners_home, corners_away, total_shots_home, total_shots_away,
                 shots_on_goal_home, shots_on_goal_away, xg_home, xg_away, api_prediction, next_goals
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             fixture_id, parsed["pressure"]["home"], parsed["pressure"]["away"],
             parsed["free_kicks"]["home"], parsed["free_kicks"]["away"],
@@ -155,7 +153,7 @@ def fetch_statistics(fixture_id: int) -> dict:
 
     return parsed
 
-# New endpoint to dynamically update only the key data for each match
+# Endpoint for live updates
 @app.get("/live-updates")
 def get_live_updates():
     try:
@@ -186,20 +184,5 @@ def get_live_updates():
         return {"updates": updates}
 
     except Exception as e:
-        return {"error": str(e), "trace": traceback.format_exc()}
+        return {"error": str(e)}
 
-# Keep-alive function to auto-ping Render every 2 minutes to avoid timeouts
-def keep_alive():
-    def ping():
-        while True:
-            try:
-                requests.get("https://under-goal-backend.onrender.com/")
-            except Exception:
-                pass
-            time.sleep(120)  # Every 2 minutes
-
-    thread = threading.Thread(target=ping)
-    thread.daemon = True
-    thread.start()
-
-keep_alive()
