@@ -1,7 +1,6 @@
 import os
 import json
-import redis
-import urllib.parse
+import sqlite3
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
@@ -14,23 +13,14 @@ app = FastAPI()
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now, this can be restricted later
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Redis Configuration
-redis_url = "rediss://default:076872a0ccac43d5ac67767e4d66d17f@redis-11539.c82.us-east-1-2.ec2.redns.redis-cloud.com:11539"
-parsed_url = urllib.parse.urlparse(redis_url)
-
-redis_client = redis.Redis(
-    host=parsed_url.hostname,
-    port=parsed_url.port,
-    password=parsed_url.password,
-    ssl=True,
-    decode_responses=True
-)
+# SQLite Configuration
+DATABASE = "database.db"  # Nombre de la base de datos SQLite
 
 # RapidAPI (API-FOOTBALL) Configuration
 API_KEY = os.getenv("RAPIDAPI_KEY")
@@ -41,16 +31,57 @@ HEADERS = {
     "X-RapidAPI-Host": API_HOST
 }
 
-@app.get("/")
-def root():
-    return {"status": "OK", "message": "API Under Goal using API-FOOTBALL (RapidAPI)"}
+# Initialize SQLite database
+def init_db():
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS statistics (
+                            fixture_id INTEGER PRIMARY KEY,
+                            pressure_home INTEGER,
+                            pressure_away INTEGER,
+                            free_kicks_home INTEGER,
+                            free_kicks_away INTEGER,
+                            dangerous_attacks_home INTEGER,
+                            dangerous_attacks_away INTEGER,
+                            possession_home INTEGER,
+                            possession_away INTEGER,
+                            corners_home INTEGER,
+                            corners_away INTEGER,
+                            total_shots_home INTEGER,
+                            total_shots_away INTEGER,
+                            shots_on_goal_home INTEGER,
+                            shots_on_goal_away INTEGER,
+                            xg_home REAL,
+                            xg_away REAL,
+                            api_prediction TEXT,
+                            next_goals TEXT
+                        )''')
+        conn.commit()
 
+# Fetch statistics and store in SQLite
 def fetch_statistics(fixture_id: int) -> dict:
-    cache_key = f"stats:{fixture_id}"
-    cached_data = redis_client.get(cache_key)
-    if cached_data:
-        return json.loads(cached_data)
+    # Check if data exists in the database
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM statistics WHERE fixture_id = ?", (fixture_id,))
+        data = cursor.fetchone()
 
+    if data:
+        return {
+            "fixture_id": data[0],
+            "pressure": {"home": data[1], "away": data[2]},
+            "free_kicks": {"home": data[3], "away": data[4]},
+            "dangerous_attacks": {"home": data[5], "away": data[6]},
+            "possession": {"home": data[7], "away": data[8]},
+            "corners": {"home": data[9], "away": data[10]},
+            "total_shots": {"home": data[11], "away": data[12]},
+            "shots_on_goal": {"home": data[13], "away": data[14]},
+            "xg": {"home": data[15], "away": data[16]},
+            "api_prediction": data[17],
+            "next_goals": data[18]
+        }
+
+    # Fetch from API if not found in the database
     url = f"{API_BASE_URL}/fixtures/statistics?fixture={fixture_id}"
     response = requests.get(url, headers=HEADERS)
     if response.status_code != 200:
@@ -100,9 +131,31 @@ def fetch_statistics(fixture_id: int) -> dict:
     parsed["pressure"]["home"] = round(parsed["pressure"]["home"] / total * 100)
     parsed["pressure"]["away"] = round(parsed["pressure"]["away"] / total * 100)
 
-    redis_client.setex(cache_key, 15, json.dumps(parsed))  # Cache expires in 15 seconds
+    # Save data to SQLite database
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO statistics (
+                fixture_id, pressure_home, pressure_away, free_kicks_home, free_kicks_away,
+                dangerous_attacks_home, dangerous_attacks_away, possession_home, possession_away,
+                corners_home, corners_away, total_shots_home, total_shots_away,
+                shots_on_goal_home, shots_on_goal_away, xg_home, xg_away, api_prediction, next_goals
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            fixture_id, parsed["pressure"]["home"], parsed["pressure"]["away"],
+            parsed["free_kicks"]["home"], parsed["free_kicks"]["away"],
+            parsed["dangerous_attacks"]["home"], parsed["dangerous_attacks"]["away"],
+            parsed["possession"]["home"], parsed["possession"]["away"],
+            parsed["corners"]["home"], parsed["corners"]["away"],
+            parsed["total_shots"]["home"], parsed["total_shots"]["away"],
+            parsed["shots_on_goal"]["home"], parsed["shots_on_goal"]["away"],
+            parsed["xg"]["home"], parsed["xg"]["away"], parsed["api_prediction"], parsed["next_goals"]
+        ))
+        conn.commit()
+
     return parsed
 
+# New endpoint to dynamically update only the key data for each match
 @app.get("/live-updates")
 def get_live_updates():
     try:
@@ -135,6 +188,7 @@ def get_live_updates():
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
 
+# Keep-alive function to auto-ping Render every 2 minutes to avoid timeouts
 def keep_alive():
     def ping():
         while True:
