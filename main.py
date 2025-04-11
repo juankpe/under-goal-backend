@@ -58,6 +58,9 @@ def init_db():
                         )''')
         conn.commit()
 
+# Initialize the database when the server starts
+init_db()  # Asegúrate de que esta línea esté al inicio
+
 # Fetch statistics and store in SQLite
 def fetch_statistics(fixture_id: int) -> dict:
     # Check if data exists in the database
@@ -134,7 +137,7 @@ def fetch_statistics(fixture_id: int) -> dict:
     # Save data to SQLite database
     with sqlite3.connect(DATABASE) as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(""" 
             INSERT OR REPLACE INTO statistics (
                 fixture_id, pressure_home, pressure_away, free_kicks_home, free_kicks_away,
                 dangerous_attacks_home, dangerous_attacks_away, possession_home, possession_away,
